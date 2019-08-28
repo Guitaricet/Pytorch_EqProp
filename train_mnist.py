@@ -8,7 +8,7 @@ from torchvision.datasets import mnist
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from ep_mlp import EPMLP
-from fp_solver import FixedStepSolver, MinGradNormSolver
+from fp_solver import FixedStepSolver, MaxGradNormSolver
 from torch.utils.tensorboard import SummaryWriter
 from time import time
 
@@ -19,7 +19,7 @@ STEP_SIZE = 0.5
 MAX_STEPS = 500
 LR = 0.01
 LOGGING_STEPS = 5
-DEVICE = 'cuda'
+DEVICE = 'cpu'
 EPOCHS = 35
 MAX_GRAD_NORM = 1e-4
 
@@ -61,7 +61,7 @@ class Logger:
 
     def log_scalar(self, scalar_name, scalar, step):
         self.tb_writer.add_scalar(scalar_name, scalar, step)
-        self.comet_exp.log_scalar(scalar_name, scalar, step)
+        self.comet_exp.log_metric(scalar_name, scalar, step)
 
 
 def get_data_loaders():
@@ -84,7 +84,7 @@ def get_data_loaders():
 
 def get_model():
     model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE))
-    solver = MinGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
+    solver = MaxGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
     return model, solver
 
 
@@ -227,7 +227,8 @@ if __name__ == '__main__':
             'step_size': STEP_SIZE,
             'lr': LR,
             'epochs': EPOCHS,
-            'max_grad_norm': MAX_GRAD_NORM
+            'max_grad_norm': MAX_GRAD_NORM,
+            'solver': 'MAX_GRAD_NORM'
         }
 
         EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
