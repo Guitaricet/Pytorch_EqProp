@@ -31,6 +31,8 @@ class Linear:
         self.out_features = out_features
         self.device = torch.device(device) if device is not None else torch.device('cpu')
         self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
+        self.predictor = torch.nn.Linear(in_features, out_features).to(device=self.device)
+        self.predictor_opt = torch.optim.SGD(self.predictor.parameters(), lr=1e-3)
 
         if bias:
             self.bias_in = torch.Tensor(in_features).to(device=device)
@@ -159,16 +161,37 @@ class EPMLP(object):
         out.to(device=self.device)
         return hidden_units + [out]
 
+    def predict_initial_states(self, inp):
+        states = []
+        h = inp
+        for layer in self._layers:
+            h = layer.predictor(h.detach())
+            states.append(h)
+
+        return states
+
+    def update_predictors(self, inp, real_states):
+        real_states = [s.detach() for s in real_states]
+        predicted_states = self.predict_initial_states(inp)
+
+        loss_fn = torch.nn.functional.mse_loss
+        for i, (state, target) in enumerate(zip(predicted_states, real_states)):
+            loss = loss_fn(state, target)
+            loss.backward()
+            self._layers[i].predictor_opt.step()
+
     @property
     def device(self):
         return self._layers[0].device
 
-    def free_phase(self, inp, solver, out=None, hidden_units=None):
+    def free_phase(self, inp, solver, out=None, hidden_units=None, init_states=None):
         """ Perform free_phase
         :return free_phase states
         """
         bsz = inp.size(0)
-        init_states = self.get_init_states(bsz, hidden_units, out, requires_grad=True)
+        if init_states is None:
+            init_states = self.get_init_states(bsz, hidden_units, out, requires_grad=True)
+
         fp_states = solver.get_fixed_point(init_states,
                                            lambda states: self.get_energy(inp, states))
         return fp_states

@@ -1,6 +1,8 @@
 """
 Train MNIST
 """
+from comet_ml import Experiment
+
 import torch
 from torchvision.datasets import mnist
 from torchvision import transforms
@@ -10,18 +12,20 @@ from fp_solver import FixedStepSolver
 from tensorboardX import SummaryWriter
 from time import time
 
+import numpy as np
+
 # ARGS
 BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.5
-MAX_STEPS = 50
+# MAX_STEPS = 2
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
 EPOCHS = 35
 
-# GLOBAL stuff
-WRITER = SummaryWriter('./logs')
+# # GLOBAL stuff
+# WRITER = SummaryWriter('./logs')
 
 
 class RunningAvg:
@@ -97,10 +101,25 @@ def train(solver, model, opt, dataloader, global_step):
         imgs = imgs.to(device=device)
         labels = labels.to(device=device)
         start = time()
-        free_states = model.free_phase(imgs, solver)
+
+        init_states = None
+        if USE_PREDICTORS:
+            init_states = model.predict_initial_states(imgs)
+            init_states_free = [s.detach().requires_grad_() for s in init_states]
+
+        free_states = model.free_phase(imgs, solver, init_states=init_states)
+        # TODO: Add init_states[-1] to clapm_phase?
         clamp_states = model.clamp_phase(imgs, labels, solver, 1,
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
+        if USE_PREDICTORS:
+            # we do not use init_states here, but rather predict them again for simplicity
+            # there are some gradient computation issues using init_states
+            mean_predictor_loss = model.update_predictors(imgs, free_states)
+
+            WRITER.add_scalar('train/mean_predictor_loss', mean_predictor_loss, global_step=global_step)
+            EXP.log_metric('mean_predictor_loss', mean_predictor_loss, step=global_step)
+
         fp_time = time() - start
 
         opt.zero_grad()
@@ -122,6 +141,14 @@ def train(solver, model, opt, dataloader, global_step):
                                                               acc_stats.get_avg() * 100, fp_time, grad_time))
             WRITER.add_scalar('train/cost', cost_stats.get_avg(), global_step=global_step)
             WRITER.add_scalar('train/acc', acc_stats.get_avg() * 100, global_step=global_step)
+            WRITER.add_scalar('fp_time', fp_time, global_step=global_step)
+            WRITER.add_scalar('grad_time', grad_time, global_step=global_step)
+
+            EXP.log_metric('cost', cost_stats.get_avg(), step=global_step)
+            EXP.log_metric('acc', acc_stats.get_avg() * 100, step=global_step)
+            EXP.log_metric('fp_time', fp_time, step=global_step)
+            EXP.log_metric('grad_time', grad_time, step=global_step)
+
             acc_stats.reset()
             cost_stats.reset()
     return global_step
@@ -134,7 +161,12 @@ def validate(solver, model, dataloader, global_step):
     for imgs, labels in dataloader:
         imgs = imgs.to(device)
         labels = labels.to(device)
-        free_states = model.free_phase(imgs, solver)
+        init_states = None
+        if USE_PREDICTORS:
+            init_states = model.predict_initial_states(imgs)
+            init_states = [s.detach().requires_grad_() for s in init_states]
+
+        free_states = model.free_phase(imgs, solver, init_states=init_states)
 
         # Record stats and report
         with torch.no_grad():
@@ -149,21 +181,58 @@ def validate(solver, model, dataloader, global_step):
     WRITER.add_scalar('valid/cost', cost_stats.get_avg(), global_step=global_step)
     WRITER.add_scalar('valid/acc', acc_stats.get_avg() * 100, global_step=global_step)
 
+    EXP.log_metric('cost', cost_stats.get_avg(), step=global_step)
+    EXP.log_metric('acc', acc_stats.get_avg() * 100, step=global_step)
+
 
 def main():
     train_loader, val_loader = get_data_loaders()
     model, solver = get_model()
     opt = get_opt(model)
     print('Train on {}'.format(model.device))
+    if USE_PREDICTORS: print('Using predictors')  # noqa E701
     global_step = 0
     epoch = 0
     while epoch < EPOCHS:
-        global_step = train(solver, model, opt, val_loader, global_step)
-        validate(solver, model, val_loader, global_step)
-        epoch += 1
+        EXP.set_epoch(epoch)
+        with EXP.train():
+            global_step = train(solver, model, opt, val_loader, global_step)
+        with EXP.validate():
+            validate(solver, model, val_loader, global_step)
+        EXP.log_epoch_end(epoch)
 
+        epoch += 1
 
 
 if __name__ == '__main__':
     """ Main loop """
-    main()
+
+    all_steps = [50, 20, 10, 7, 5, 4, 3, 2, 1]
+    np.random.shuffle(all_steps)
+    for max_steps in all_steps:
+        for use_predictors in [False, True]:
+            hparams = {
+                'max_steps': max_steps,
+                'use_predictors': use_predictors,
+                'batch_size': BATCH_SIZE,
+                'hidden_sizes': str(HIDDEN_SIZES),
+                'step_size': STEP_SIZE,
+                'lr': LR,
+                'epochs': EPOCHS
+            }
+
+            EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
+            EXP.log_parameters(hparams)
+
+            MAX_STEPS = max_steps
+            USE_PREDICTORS = use_predictors
+
+            comment = f'{MAX_STEPS}_steps'
+            if USE_PREDICTORS:
+                comment += '_predictors'
+
+            WRITER = SummaryWriter(comment=comment)
+            # WRITER.add_hparams(hparams)
+
+            main()
+            EXP.end()
