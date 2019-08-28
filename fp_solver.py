@@ -34,3 +34,33 @@ class FixedStepSolver(FixedPointSolver):
                 tensor[:] = torch.clamp(tensor, 0, 1)
             step += 1
         return states
+
+
+class MinGradNormSolver(FixedPointSolver):
+    """ Use step size each time """
+    def __init__(self, step_size, min_grad_norm=1e-6, max_steps=500):
+        self.step_size = step_size
+        self.max_steps = max_steps
+        self.min_grad_norm = min_grad_norm
+        self._logs = dict()
+
+    def get_fixed_point(self, states, energy_fn):
+        """ Use fixed step size gradient decsent """
+        for step in range(self.max_steps):
+            energy = energy_fn(states)
+            grads = autograd.grad(-torch.sum(energy), states)
+            for tensor, grad in zip(states, grads):
+                tensor[:] = tensor + self.step_size * grad
+                tensor[:] = torch.clamp(tensor, 0, 1)
+
+            grad_norm = self._get_grad_norm(grads)
+            if grad_norm < self.min_grad_norm:
+                self._logs['steps_made'] = step
+                self._logs['grad_norm'] = grad_norm
+                break
+
+        return states
+
+    @staticmethod
+    def _get_grad_norm(grads):
+        return sum(grad.norm() for grad in grads)

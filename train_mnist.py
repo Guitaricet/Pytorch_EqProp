@@ -8,21 +8,20 @@ from torchvision.datasets import mnist
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from ep_mlp import EPMLP
-from fp_solver import FixedStepSolver
+from fp_solver import FixedStepSolver, MinGradNormSolver
 from torch.utils.tensorboard import SummaryWriter
 from time import time
-
-import numpy as np
 
 # ARGS
 BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.5
-# MAX_STEPS = 2
+MAX_STEPS = 500
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
 EPOCHS = 35
+MAX_GRAD_NORM = 1e-4
 
 # # GLOBAL stuff
 # WRITER = SummaryWriter('./logs')
@@ -55,6 +54,16 @@ class OneHot(object):
         return oh_vec
 
 
+class Logger:
+    def __init__(self, tb_writer, comet_exp):
+        self.tb_writer = tb_writer
+        self.comet_exp = comet_exp
+
+    def log_scalar(self, scalar_name, scalar, step):
+        self.tb_writer.add_scalar(scalar_name, scalar, step)
+        self.comet_exp.log_scalar(scalar_name, scalar, step)
+
+
 def get_data_loaders():
     img_transform = transforms.Compose([transforms.ToTensor(),
                                         transforms.Lambda(lambda x: x.view(-1))])
@@ -75,7 +84,7 @@ def get_data_loaders():
 
 def get_model():
     model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE))
-    solver = FixedStepSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS)
+    solver = MinGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
     return model, solver
 
 
@@ -105,13 +114,15 @@ def train(solver, model, opt, dataloader, global_step):
         init_states = None
         if USE_PREDICTORS:
             init_states = model.predict_initial_states(imgs)
-            init_states_free = [s.detach().requires_grad_() for s in init_states]
 
         free_states = model.free_phase(imgs, solver, init_states=init_states)
         # TODO: Add init_states[-1] to clapm_phase?
         clamp_states = model.clamp_phase(imgs, labels, solver, 1,
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
+
+        LOGGER.log_scalar('solver_steps', solver._logs['steps_made'], global_step)
+        LOGGER.log_scalar('solver_grad_norm', solver._logs['grad_norm'], global_step)
         if USE_PREDICTORS:
             # we do not use init_states here, but rather predict them again for simplicity
             # there are some gradient computation issues using init_states
@@ -207,32 +218,30 @@ def main():
 if __name__ == '__main__':
     """ Main loop """
 
-    all_steps = [50, 20, 10, 7, 5, 4, 3, 2, 1]
-    np.random.shuffle(all_steps)
-    for max_steps in all_steps:
-        for use_predictors in [False, True]:
-            hparams = {
-                'max_steps': max_steps,
-                'use_predictors': use_predictors,
-                'batch_size': BATCH_SIZE,
-                'hidden_sizes': str(HIDDEN_SIZES),
-                'step_size': STEP_SIZE,
-                'lr': LR,
-                'epochs': EPOCHS
-            }
+    for use_predictors in [False, True]:
+        hparams = {
+            'max_steps': MAX_STEPS,
+            'use_predictors': use_predictors,
+            'batch_size': BATCH_SIZE,
+            'hidden_sizes': str(HIDDEN_SIZES),
+            'step_size': STEP_SIZE,
+            'lr': LR,
+            'epochs': EPOCHS,
+            'max_grad_norm': MAX_GRAD_NORM
+        }
 
-            EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
-            EXP.log_parameters(hparams)
+        EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
+        EXP.log_parameters(hparams)
 
-            MAX_STEPS = max_steps
-            USE_PREDICTORS = use_predictors
+        USE_PREDICTORS = use_predictors
 
-            comment = f'{MAX_STEPS}_steps'
-            if USE_PREDICTORS:
-                comment += '_predictors'
+        comment = f'{MAX_STEPS}_steps'
+        if USE_PREDICTORS:
+            comment += '_predictors'
 
-            WRITER = SummaryWriter(comment=comment)
-            # WRITER.add_hparams(hparams)
+        WRITER = SummaryWriter(comment=comment)
 
-            main()
-            EXP.end()
+        LOGGER = Logger(WRITER, EXP)
+
+        main()
+        EXP.end()
