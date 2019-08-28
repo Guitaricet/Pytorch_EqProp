@@ -9,7 +9,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from ep_mlp import EPMLP
 from fp_solver import FixedStepSolver
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from time import time
 
 import numpy as np
