@@ -179,6 +179,7 @@ class EPMLP(object):
             loss = loss_fn(state, target)
             loss.backward()
             self._layers[i].predictor_opt.step()
+        return torch.mean(loss).item()
 
     @property
     def device(self):
