@@ -176,7 +176,7 @@ def validate(solver, model, dataloader, global_step):
         imgs = imgs.to(device)
         labels = labels.to(device)
         init_states = None
-        if USE_PREDICTORS and :
+        if USE_PREDICTORS:
             init_states = model.predict_initial_states(imgs)
             init_states = [s.detach().requires_grad_() for s in init_states]
 
