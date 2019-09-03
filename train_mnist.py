@@ -21,7 +21,7 @@ MAX_STEPS = 100
 LR = 0.0
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
-EPOCHS = 35
+EPOCHS = 3500  # ONE BATCH ONLY
 MAX_GRAD_NORM = 10
 EXPLORATION_PROB = 0.1
 PREDICTOR_LR = 1e-3
@@ -165,6 +165,9 @@ def train(solver, model, opt, dataloader, global_step):
 
             acc_stats.reset()
             cost_stats.reset()
+
+        # ONE BATCH ONLY!!!
+        break
     return global_step
 
 
