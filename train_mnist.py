@@ -231,6 +231,7 @@ if __name__ == '__main__':
             'epochs': EPOCHS,
             'max_grad_norm': MAX_GRAD_NORM,
             'solver': 'MAX_GRAD_NORM',
+            'predictor_optimizer': 'ADAM',
         }
 
         EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
