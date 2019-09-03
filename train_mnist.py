@@ -3,6 +3,7 @@ Train MNIST
 """
 from comet_ml import Experiment
 
+from random import random
 import torch
 from torchvision.datasets import mnist
 from torchvision import transforms
@@ -23,6 +24,7 @@ DEVICE = 'cuda'
 EPOCHS = 35
 MAX_GRAD_NORM = 10
 PREDICTOR_LR = 0
+EXPLORATION_PROB = 0.1
 
 # # GLOBAL stuff
 # WRITER = SummaryWriter('./logs')
@@ -113,7 +115,7 @@ def train(solver, model, opt, dataloader, global_step):
         start = time()
 
         init_states = None
-        if USE_PREDICTORS:
+        if USE_PREDICTORS and random() > EXPLORATION_PROB:
             init_states = model.predict_initial_states(imgs)
 
         free_states = model.free_phase(imgs, solver, init_states=init_states)
@@ -174,7 +176,7 @@ def validate(solver, model, dataloader, global_step):
         imgs = imgs.to(device)
         labels = labels.to(device)
         init_states = None
-        if USE_PREDICTORS:
+        if USE_PREDICTORS and :
             init_states = model.predict_initial_states(imgs)
             init_states = [s.detach().requires_grad_() for s in init_states]
 
