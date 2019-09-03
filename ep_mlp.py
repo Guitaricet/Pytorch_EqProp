@@ -26,13 +26,13 @@ def unflatten(flattened, shapes):
 
 class Linear:
     """ A linear layer in EP """
-    def __init__(self, in_features, out_features, bias=True, device=None):
+    def __init__(self, in_features, out_features, bias=True, device=None, predictor_lr=0):
         self.in_features = in_features
         self.out_features = out_features
         self.device = torch.device(device) if device is not None else torch.device('cpu')
         self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
         self.predictor = torch.nn.Linear(in_features, out_features).to(device=self.device)
-        self.predictor_opt = torch.optim.SGD(self.predictor.parameters(), lr=1e-3)
+        self.predictor_opt = torch.optim.SGD(self.predictor.parameters(), lr=predictor_lr)
 
         if bias:
             self.bias_in = torch.Tensor(in_features).to(device=device)

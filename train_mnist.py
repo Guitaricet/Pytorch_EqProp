@@ -15,13 +15,13 @@ from time import time
 # ARGS
 BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
-STEP_SIZE = 0.5
+STEP_SIZE = 0.0
 MAX_STEPS = 500
 LR = 0.0
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
 EPOCHS = 35
-MAX_GRAD_NORM = 1e-4
+MAX_GRAD_NORM = 10
 
 # # GLOBAL stuff
 # WRITER = SummaryWriter('./logs')
