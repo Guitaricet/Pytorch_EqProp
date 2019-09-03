@@ -16,7 +16,7 @@ from time import time
 BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.0
-MAX_STEPS = 500
+MAX_STEPS = 100
 LR = 0.0
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
@@ -218,7 +218,7 @@ def main():
 if __name__ == '__main__':
     """ Main loop """
 
-    for use_predictors in [False, True]:
+    for use_predictors in [True, False]:
         hparams = {
             'max_steps': MAX_STEPS,
             'use_predictors': use_predictors,
