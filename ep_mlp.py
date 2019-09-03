@@ -32,7 +32,7 @@ class Linear:
         self.device = torch.device(device) if device is not None else torch.device('cpu')
         self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
         self.predictor = torch.nn.Linear(in_features, out_features).to(device=self.device)
-        self.predictor_opt = torch.optim.AdamOptimizer(self.predictor.parameters(), lr=predictor_lr)
+        self.predictor_opt = torch.optim.Adam(self.predictor.parameters(), lr=predictor_lr)
 
         if bias:
             self.bias_in = torch.Tensor(in_features).to(device=device)
