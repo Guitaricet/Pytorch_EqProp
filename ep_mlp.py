@@ -87,7 +87,7 @@ class Linear:
 
 class EPMLP(object):
 
-    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None, device=None):
+    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None, device=None, predictor_lr=0):
         """
         :param in_size: int
         :param out_size: int
@@ -104,7 +104,8 @@ class EPMLP(object):
         for idx in range(len(layer_sizes) - 1):
             self._layers += [Linear(in_features=layer_sizes[idx],
                                     out_features=layer_sizes[idx + 1],
-                                    device=device)]
+                                    device=device,
+                                    predictor_lr=predictor_lr)]
         self._non_linear = non_linear if non_linear is not None \
             else lambda x: torch.clamp(x, min=0, max=1)
 
@@ -203,7 +204,7 @@ class EPMLP(object):
         init_states = self.get_init_states(bsz, hidden_units, out, requires_grad=True)
         fp_states = solver.get_fixed_point(init_states,
                                            lambda states: self.get_energy(inp, states) +
-                                                          beta * self.get_cost(states, label))
+                                                          beta * self.get_cost(states, label))  # noqa E127
         return fp_states
 
     def set_gradients(self, inp, free_states, clamp_states):
