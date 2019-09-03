@@ -22,6 +22,7 @@ LOGGING_STEPS = 5
 DEVICE = 'cuda'
 EPOCHS = 35
 MAX_GRAD_NORM = 10
+PREDICTOR_LR = 0
 
 # # GLOBAL stuff
 # WRITER = SummaryWriter('./logs')
@@ -83,7 +84,7 @@ def get_data_loaders():
 
 
 def get_model():
-    model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE))
+    model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE), predictor_lr=PREDICTOR_LR)
     solver = MaxGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
     return model, solver
 
@@ -207,7 +208,7 @@ def main():
     while epoch < EPOCHS:
         EXP.set_epoch(epoch)
         with EXP.train():
-            global_step = train(solver, model, opt, val_loader, global_step)
+            global_step = train(solver, model, opt, train_loader, global_step)
         with EXP.validate():
             validate(solver, model, val_loader, global_step)
         EXP.log_epoch_end(epoch)
@@ -225,10 +226,11 @@ if __name__ == '__main__':
             'batch_size': BATCH_SIZE,
             'hidden_sizes': str(HIDDEN_SIZES),
             'step_size': STEP_SIZE,
+            'predictor_lr': PREDICTOR_LR,
             'lr': LR,
             'epochs': EPOCHS,
             'max_grad_norm': MAX_GRAD_NORM,
-            'solver': 'MAX_GRAD_NORM'
+            'solver': 'MAX_GRAD_NORM',
         }
 
         EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
