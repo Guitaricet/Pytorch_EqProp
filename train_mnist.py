@@ -214,8 +214,9 @@ def main():
         EXP.set_epoch(epoch)
         with EXP.train():
             global_step = train(solver, model, opt, train_loader, global_step)
-        with EXP.validate():
-            validate(solver, model, val_loader, global_step)
+        # ONE BATCH ONLY
+        # with EXP.validate():
+        #     validate(solver, model, val_loader, global_step)
         EXP.log_epoch_end(epoch)
 
         epoch += 1
