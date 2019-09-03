@@ -79,7 +79,7 @@ def get_data_loaders():
                            transform=img_transform,
                            target_transform=OneHot(10))
     train_loader = DataLoader(train_dset, batch_size=BATCH_SIZE,
-                              shuffle=True)
+                              shuffle=False)  # ONE BATCH ONLY
     val_loader = DataLoader(val_dset, batch_size=BATCH_SIZE,
                             shuffle=False)
     return train_loader, val_loader
