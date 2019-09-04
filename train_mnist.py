@@ -20,7 +20,7 @@ MAX_STEPS = 100
 LR = 0.0
 LOGGING_STEPS = 5
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-EPOCHS = 500  # ONE BATCH ONLY
+EPOCHS = 35
 MAX_GRAD_NORM = 10
 EXPLORATION_PROB = 0.0
 PREDICTOR_LR = 1e-3
@@ -66,7 +66,7 @@ def get_data_loaders():
                            transform=img_transform,
                            target_transform=OneHot(10))
     train_loader = DataLoader(train_dset, batch_size=BATCH_SIZE,
-                              shuffle=False)  # ONE BATCH ONLY
+                              shuffle=True)
     val_loader = DataLoader(val_dset, batch_size=BATCH_SIZE,
                             shuffle=False)
     return train_loader, val_loader
@@ -146,8 +146,6 @@ def train(solver, model, opt, dataloader, global_step):
             EXP.log_metric('fp_time', fp_time, step=global_step)
             EXP.log_metric('grad_time', grad_time, step=global_step)
 
-        # ONE BATCH ONLY!!!
-        break
     return global_step
 
 
@@ -192,9 +190,8 @@ def main():
         EXP.set_epoch(epoch)
         with EXP.train():
             global_step = train(solver, model, opt, train_loader, global_step)
-        # ONE BATCH ONLY
-        # with EXP.validate():
-        #     validate(solver, model, val_loader, global_step)
+        with EXP.validate():
+            validate(solver, model, val_loader, global_step)
         EXP.log_epoch_end(epoch)
 
         epoch += 1
