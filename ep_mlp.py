@@ -6,6 +6,12 @@ from torch.nn import init
 from torch import matmul
 from torch import autograd
 
+from sklearn.metrics import r2_score
+
+
+def detorch(x):
+    return x.detach().cpu().numpy()
+
 
 def flatten(vars):
     """
@@ -26,16 +32,17 @@ def unflatten(flattened, shapes):
 
 class Linear:
     """ A linear layer in EP """
-    def __init__(self, in_features, out_features, bias=True, device=None, predictor_lr=0):
+    def __init__(self, in_features, out_features, bias=True, device=None, predictor_lr=None, predictor_hidden=None):
         self.in_features = in_features
         self.out_features = out_features
         self.device = torch.device(device) if device is not None else torch.device('cpu')
         self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
         self.predictor = torch.nn.Sequential(
-            torch.nn.Linear(in_features, 128),
-            torch.nn.Linear(128, out_features)
+            torch.nn.Linear(in_features, predictor_hidden),
+            torch.nn.ReLU(),
+            torch.nn.Linear(predictor_hidden, out_features)
         ).to(device=self.device)
-        self.predictor_opt = torch.optim.Adam(self.predictor.parameters(), lr=predictor_lr)
+        self.predictor_opt = torch.optim.SGD(self.predictor.parameters(), lr=predictor_lr)
 
         if bias:
             self.bias_in = torch.Tensor(in_features).to(device=device)
@@ -90,7 +97,8 @@ class Linear:
 
 class EPMLP(object):
 
-    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None, device=None, predictor_lr=0):
+    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None, device=None,
+                 predictor_lr=None, exp_obj=None, predictor_hidden=None):
         """
         :param in_size: int
         :param out_size: int
@@ -100,6 +108,7 @@ class EPMLP(object):
         self._in_size = in_size
         self._out_size = out_size
         self._hidden_sizes = hidden_sizes
+        self.exp_obj = exp_obj
 
         # Initialize weights
         layer_sizes = [in_size] + hidden_sizes + [out_size]
@@ -108,7 +117,8 @@ class EPMLP(object):
             self._layers += [Linear(in_features=layer_sizes[idx],
                                     out_features=layer_sizes[idx + 1],
                                     device=device,
-                                    predictor_lr=predictor_lr)]
+                                    predictor_lr=predictor_lr,
+                                    predictor_hidden=predictor_hidden)]
         self._non_linear = non_linear if non_linear is not None \
             else lambda x: torch.clamp(x, min=0, max=1)
 
@@ -168,22 +178,36 @@ class EPMLP(object):
     def predict_initial_states(self, inp):
         states = []
         h = inp
-        for layer in self._layers:
+        for i, layer in enumerate(self._layers):
             h = layer.predictor(h.detach())
+            h = self._non_linear(h)
             states.append(h)
 
         return states
 
-    def update_predictors(self, inp, real_states):
+    def update_predictors(self, inp, real_states, nsteps=1, global_step=None):
         real_states = [s.detach() for s in real_states]
-        predicted_states = self.predict_initial_states(inp)
 
-        loss_fn = torch.nn.functional.mse_loss
-        for i, (state, target) in enumerate(zip(predicted_states, real_states)):
-            loss = loss_fn(state, target)
-            loss.backward()
-            self._layers[i].predictor_opt.step()
-        return torch.mean(loss).item()
+        for i in range(nsteps):
+            predicted_states = self.predict_initial_states(inp)
+
+            losses = [0] * len(real_states)
+
+            loss_fn = torch.nn.functional.mse_loss
+            for j, (state, target) in enumerate(zip(predicted_states, real_states)):
+
+                self._layers[j].predictor_opt.zero_grad()
+                loss = loss_fn(state, target)
+                loss.backward()
+                self._layers[j].predictor_opt.step()
+
+                self.exp_obj.log_metric(f'predictor_loss_layer_{j}', loss.item(), step=global_step or i)
+                self.exp_obj.log_metric(f'predictor_r2_layer_{j}',
+                                        r2_score(detorch(target), detorch(state)),
+                                        step=global_step or i)
+                losses[j] = loss.item()
+
+        return sum(losses) / len(losses)
 
     @property
     def device(self):

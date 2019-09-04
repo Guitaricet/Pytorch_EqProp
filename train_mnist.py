@@ -20,11 +20,12 @@ STEP_SIZE = 0.5
 MAX_STEPS = 100
 LR = 0.01
 LOGGING_STEPS = 5
-DEVICE = 'cuda'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 EPOCHS = 3500  # ONE BATCH ONLY
 MAX_GRAD_NORM = 10
 EXPLORATION_PROB = 0.1
 PREDICTOR_LR = 1e-3
+PREDICTOR_HIDDEN = 500
 
 # # GLOBAL stuff
 # WRITER = SummaryWriter('./logs')
@@ -86,7 +87,8 @@ def get_data_loaders():
 
 
 def get_model():
-    model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE), predictor_lr=PREDICTOR_LR)
+    model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE),
+                  predictor_lr=PREDICTOR_LR, exp_obj=EXP, predictor_hidden=PREDICTOR_HIDDEN)
     solver = MaxGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
     return model, solver
 
@@ -119,7 +121,7 @@ def train(solver, model, opt, dataloader, global_step):
             init_states = model.predict_initial_states(imgs)
 
         free_states = model.free_phase(imgs, solver, init_states=init_states)
-        # TODO: Add init_states[-1] to clapm_phase?
+        # TODO: Add init_states[-1] to clamp_phase?
         clamp_states = model.clamp_phase(imgs, labels, solver, 1,
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
@@ -131,7 +133,6 @@ def train(solver, model, opt, dataloader, global_step):
             # there are some gradient computation issues using init_states
             mean_predictor_loss = model.update_predictors(imgs, free_states)
 
-            WRITER.add_scalar('train/mean_predictor_loss', mean_predictor_loss, global_step=global_step)
             EXP.log_metric('mean_predictor_loss', mean_predictor_loss, step=global_step)
 
         fp_time = time() - start
@@ -151,20 +152,13 @@ def train(solver, model, opt, dataloader, global_step):
         if global_step % LOGGING_STEPS == 0:
             print('At step {}, cost: {:.4f}, acc: {:.2f}, '
                   'fp time: {:.3f}, grad time: {:.3f}'.format(global_step,
-                                                              cost_stats.get_avg(),
-                                                              acc_stats.get_avg() * 100, fp_time, grad_time))
-            WRITER.add_scalar('train/cost', cost_stats.get_avg(), global_step=global_step)
-            WRITER.add_scalar('train/acc', acc_stats.get_avg() * 100, global_step=global_step)
-            WRITER.add_scalar('fp_time', fp_time, global_step=global_step)
-            WRITER.add_scalar('grad_time', grad_time, global_step=global_step)
+                                                              avg_cost,
+                                                              avg_corrects * 100, fp_time, grad_time))
 
-            EXP.log_metric('cost', cost_stats.get_avg(), step=global_step)
-            EXP.log_metric('acc', acc_stats.get_avg() * 100, step=global_step)
+            EXP.log_metric('cost', avg_cost, step=global_step)
+            EXP.log_metric('acc', avg_corrects * 100, step=global_step)
             EXP.log_metric('fp_time', fp_time, step=global_step)
             EXP.log_metric('grad_time', grad_time, step=global_step)
-
-            acc_stats.reset()
-            cost_stats.reset()
 
         # ONE BATCH ONLY!!!
         break
@@ -195,8 +189,6 @@ def validate(solver, model, dataloader, global_step):
           'validation acc: {:.2f}'.format(global_step,
                                           cost_stats.get_avg(),
                                           acc_stats.get_avg() * 100))
-    WRITER.add_scalar('valid/cost', cost_stats.get_avg(), global_step=global_step)
-    WRITER.add_scalar('valid/acc', acc_stats.get_avg() * 100, global_step=global_step)
 
     EXP.log_metric('cost', cost_stats.get_avg(), step=global_step)
     EXP.log_metric('acc', acc_stats.get_avg() * 100, step=global_step)
@@ -238,6 +230,10 @@ if __name__ == '__main__':
             'max_grad_norm': MAX_GRAD_NORM,
             'solver': 'MAX_GRAD_NORM',
             'predictor_optimizer': 'ADAM',
+            'exploration_prob': EXPLORATION_PROB,
+            'nonlinearity_after_predictor': True,
+            'fixed_zero_grad': True,
+            'predictor_hidden': PREDICTOR_HIDDEN
         }
 
         EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
