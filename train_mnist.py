@@ -131,7 +131,7 @@ def train(solver, model, opt, dataloader, global_step):
         if USE_PREDICTORS:
             # we do not use init_states here, but rather predict them again for simplicity
             # there are some gradient computation issues using init_states
-            mean_predictor_loss = model.update_predictors(imgs, free_states)
+            mean_predictor_loss = model.update_predictors(imgs, free_states, global_step=global_step)
 
             EXP.log_metric('mean_predictor_loss', mean_predictor_loss, step=global_step)
 
