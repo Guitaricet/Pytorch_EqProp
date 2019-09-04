@@ -10,7 +10,6 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from ep_mlp import EPMLP
 from fp_solver import FixedStepSolver, MaxGradNormSolver
-from torch.utils.tensorboard import SummaryWriter
 from time import time
 
 # ARGS
@@ -26,9 +25,6 @@ MAX_GRAD_NORM = 10
 EXPLORATION_PROB = 0.0
 PREDICTOR_LR = 1e-3
 PREDICTOR_HIDDEN = 500
-
-# # GLOBAL stuff
-# WRITER = SummaryWriter('./logs')
 
 
 class RunningAvg:
@@ -56,16 +52,6 @@ class OneHot(object):
         oh_vec = torch.Tensor(self.num_class).zero_()
         oh_vec[label] = 1.
         return oh_vec
-
-
-class Logger:
-    def __init__(self, tb_writer, comet_exp):
-        self.tb_writer = tb_writer
-        self.comet_exp = comet_exp
-
-    def log_scalar(self, scalar_name, scalar, step):
-        self.tb_writer.add_scalar(scalar_name, scalar, step)
-        self.comet_exp.log_metric(scalar_name, scalar, step)
 
 
 def get_data_loaders():
@@ -126,8 +112,8 @@ def train(solver, model, opt, dataloader, global_step):
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
 
-        LOGGER.log_scalar('solver_steps', solver._logs['steps_made'], global_step)
-        LOGGER.log_scalar('solver_grad_norm', solver._logs['grad_norm'], global_step)
+        EXP.log_metric('solver_steps', solver._logs['steps_made'], global_step)
+        EXP.log_metric('solver_grad_norm', solver._logs['grad_norm'], global_step)
         if USE_PREDICTORS:
             # we do not use init_states here, but rather predict them again for simplicity
             # there are some gradient computation issues using init_states
@@ -244,10 +230,6 @@ if __name__ == '__main__':
         comment = f'{MAX_STEPS}_steps'
         if USE_PREDICTORS:
             comment += '_predictors'
-
-        WRITER = SummaryWriter(comment=comment)
-
-        LOGGER = Logger(WRITER, EXP)
 
         main()
         EXP.end()
