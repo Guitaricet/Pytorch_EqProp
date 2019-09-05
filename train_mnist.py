@@ -17,11 +17,11 @@ BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.5
 MAX_STEPS = 100
-LR = 0.0
+LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 EPOCHS = 35
-MAX_GRAD_NORM = 10
+MAX_GRAD_NORM = 80
 EXPLORATION_PROB = 0.0
 PREDICTOR_LR = 1e-3
 PREDICTOR_HIDDEN = 500
@@ -199,34 +199,37 @@ def main():
 
 if __name__ == '__main__':
     """ Main loop """
+    for max_grad_norm in [80, 100, 150]:
+        for max_steps in [4, 10, 20]:
+            for use_predictors in [False, True]:
+                MAX_STEPS = max_steps
+                MAX_GRAD_NORM = max_grad_norm
+                USE_PREDICTORS = use_predictors
 
-    for use_predictors in [True, False]:
-        hparams = {
-            'max_steps': MAX_STEPS,
-            'use_predictors': use_predictors,
-            'batch_size': BATCH_SIZE,
-            'hidden_sizes': str(HIDDEN_SIZES),
-            'step_size': STEP_SIZE,
-            'predictor_lr': PREDICTOR_LR,
-            'lr': LR,
-            'epochs': EPOCHS,
-            'max_grad_norm': MAX_GRAD_NORM,
-            'solver': 'MAX_GRAD_NORM',
-            'predictor_optimizer': 'ADAM',
-            'exploration_prob': EXPLORATION_PROB,
-            'nonlinearity_after_predictor': True,
-            'fixed_zero_grad': True,
-            'predictor_hidden': PREDICTOR_HIDDEN
-        }
+                hparams = {
+                    'max_steps': MAX_STEPS,
+                    'use_predictors': USE_PREDICTORS,
+                    'batch_size': BATCH_SIZE,
+                    'hidden_sizes': str(HIDDEN_SIZES),
+                    'step_size': STEP_SIZE,
+                    'predictor_lr': PREDICTOR_LR,
+                    'lr': LR,
+                    'epochs': EPOCHS,
+                    'max_grad_norm': MAX_GRAD_NORM,
+                    'solver': 'MAX_GRAD_NORM',
+                    'predictor_optimizer': 'ADAM',
+                    'exploration_prob': EXPLORATION_PROB,
+                    'nonlinearity_after_predictor': True,
+                    'fixed_zero_grad': True,
+                    'predictor_hidden': PREDICTOR_HIDDEN
+                }
 
-        EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
-        EXP.log_parameters(hparams)
+                EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
+                EXP.log_parameters(hparams)
 
-        USE_PREDICTORS = use_predictors
+                comment = f'{MAX_STEPS}_steps'
+                if USE_PREDICTORS:
+                    comment += '_predictors'
 
-        comment = f'{MAX_STEPS}_steps'
-        if USE_PREDICTORS:
-            comment += '_predictors'
-
-        main()
-        EXP.end()
+                main()
+                EXP.end()
