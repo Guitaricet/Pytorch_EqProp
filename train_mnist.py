@@ -174,8 +174,8 @@ def validate(solver, model, dataloader, global_step):
                                           cost_stats.get_avg(),
                                           acc_stats.get_avg() * 100))
 
-    EXP.log_metric('cost', cost_stats.get_avg(), step=global_step)
-    EXP.log_metric('acc', acc_stats.get_avg() * 100, step=global_step)
+    EXP.log_metric('cost', avg_cost, step=global_step)
+    EXP.log_metric('acc', avg_corrects * 100, step=global_step)
 
 
 def main():
