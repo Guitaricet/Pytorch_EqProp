@@ -1,0 +1,4 @@
+torch
+torchvision
+comet_ml
+sklearn

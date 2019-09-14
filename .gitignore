@@ -3,3 +3,5 @@ __pycache__
 mnist_data
 logs
 .vscode
+runs
+.env

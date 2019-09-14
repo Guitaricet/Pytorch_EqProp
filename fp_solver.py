@@ -5,6 +5,10 @@ import torch
 from torch import autograd
 
 
+def get_grad_norm(grads):
+    return sum(grad.norm() for grad in grads).cpu().numpy()
+
+
 class FixedPointSolver(object):
     """ fixed point solver base class """
     @abstractmethod
@@ -22,6 +26,7 @@ class FixedStepSolver(FixedPointSolver):
     def __init__(self, step_size, max_steps=500):
         self.step_size = step_size
         self.max_steps = max_steps
+        self._logs = dict()
 
     def get_fixed_point(self, states, energy_fn):
         """ Use fixed step size gradient decsent """
@@ -33,6 +38,8 @@ class FixedStepSolver(FixedPointSolver):
                 tensor[:] = tensor + self.step_size * grad
                 tensor[:] = torch.clamp(tensor, 0, 1)
             step += 1
+        self._logs['steps_made'] = self.max_steps
+        self._logs['grad_norm'] = get_grad_norm(grads)
         return states
 
 
@@ -53,14 +60,10 @@ class MaxGradNormSolver(FixedPointSolver):
                 tensor[:] = tensor + self.step_size * grad
                 tensor[:] = torch.clamp(tensor, 0, 1)
 
-            grad_norm = self._get_grad_norm(grads)
+            grad_norm = get_grad_norm(grads)
             if grad_norm < self.max_grad_norm:
                 break
         self._logs['steps_made'] = step
         self._logs['grad_norm'] = grad_norm
 
         return states
-
-    @staticmethod
-    def _get_grad_norm(grads):
-        return sum(grad.norm() for grad in grads)

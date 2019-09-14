@@ -16,7 +16,7 @@ from time import time
 BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.5
-MAX_STEPS = 100
+MAX_STEPS = 20
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -25,6 +25,7 @@ MAX_GRAD_NORM = 80
 EXPLORATION_PROB = 0.0
 PREDICTOR_LR = 1e-3
 PREDICTOR_HIDDEN = 500
+PREDICTOR_N_OPT_STEPS = 1
 
 
 class RunningAvg:
@@ -76,6 +77,7 @@ def get_model():
     model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE),
                   predictor_lr=PREDICTOR_LR, exp_obj=EXP, predictor_hidden=PREDICTOR_HIDDEN)
     solver = MaxGradNormSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS, max_grad_norm=MAX_GRAD_NORM)
+    # solver = FixedStepSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS)
     return model, solver
 
 
@@ -111,13 +113,12 @@ def train(solver, model, opt, dataloader, global_step):
         clamp_states = model.clamp_phase(imgs, labels, solver, 1,
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
-
         EXP.log_metric('solver_steps', solver._logs['steps_made'], global_step)
         EXP.log_metric('solver_grad_norm', solver._logs['grad_norm'], global_step)
         if USE_PREDICTORS:
             # we do not use init_states here, but rather predict them again for simplicity
             # there are some gradient computation issues using init_states
-            mean_predictor_loss = model.update_predictors(imgs, free_states, global_step=global_step)
+            mean_predictor_loss = model.update_predictors(imgs, free_states, global_step=global_step, nsteps=PREDICTOR_N_OPT_STEPS)
 
             EXP.log_metric('mean_predictor_loss', mean_predictor_loss, step=global_step)
 
@@ -199,37 +200,38 @@ def main():
 
 if __name__ == '__main__':
     """ Main loop """
-    for max_grad_norm in [80, 100, 150]:
-        for max_steps in [4, 10, 20]:
-            for use_predictors in [False, True]:
-                MAX_STEPS = max_steps
-                MAX_GRAD_NORM = max_grad_norm
-                USE_PREDICTORS = use_predictors
+    for use_predictors in [True, False]:
 
-                hparams = {
-                    'max_steps': MAX_STEPS,
-                    'use_predictors': USE_PREDICTORS,
-                    'batch_size': BATCH_SIZE,
-                    'hidden_sizes': str(HIDDEN_SIZES),
-                    'step_size': STEP_SIZE,
-                    'predictor_lr': PREDICTOR_LR,
-                    'lr': LR,
-                    'epochs': EPOCHS,
-                    'max_grad_norm': MAX_GRAD_NORM,
-                    'solver': 'MAX_GRAD_NORM',
-                    'predictor_optimizer': 'ADAM',
-                    'exploration_prob': EXPLORATION_PROB,
-                    'nonlinearity_after_predictor': True,
-                    'fixed_zero_grad': True,
-                    'predictor_hidden': PREDICTOR_HIDDEN
-                }
+        USE_PREDICTORS = use_predictors
 
-                EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
-                EXP.log_parameters(hparams)
+        hparams = {
+            'max_steps': MAX_STEPS,
+            'use_predictors': USE_PREDICTORS,
+            'batch_size': BATCH_SIZE,
+            'hidden_sizes': str(HIDDEN_SIZES),
+            'step_size': STEP_SIZE,
+            'predictor_lr': PREDICTOR_LR,
+            'lr': LR,
+            'epochs': EPOCHS,
+            # 'max_grad_norm': MAX_GRAD_NORM,
+            'solver': 'MAX_GRAD_NORM',
+            'predictor_optimizer': 'SGD',
+            # 'exploration_prob': EXPLORATION_PROB,
+            'nonlinearity_after_predictor': True,
+            'fixed_zero_grad': True,
+            # 'predictor_hidden': PREDICTOR_HIDDEN,
+            'stopping_criterion': 'MaxGradNormSolver',
+            # 'predictor_n_opt_steps': PREDICTOR_N_OPT_STEPS
+        }
 
-                comment = f'{MAX_STEPS}_steps'
-                if USE_PREDICTORS:
-                    comment += '_predictors'
+        EXP = Experiment(project_name='EqProp', auto_metric_logging=False)
+        EXP.add_tag('linear predictor')
 
-                main()
-                EXP.end()
+        EXP.log_parameters(hparams)
+
+        comment = f'{MAX_STEPS}_steps'
+        if USE_PREDICTORS:
+            comment += '_predictors'
+
+        main()
+        EXP.end()

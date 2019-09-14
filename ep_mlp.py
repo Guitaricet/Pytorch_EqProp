@@ -38,9 +38,9 @@ class Linear:
         self.device = torch.device(device) if device is not None else torch.device('cpu')
         self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
         self.predictor = torch.nn.Sequential(
-            torch.nn.Linear(in_features, predictor_hidden),
-            torch.nn.ReLU(),
-            torch.nn.Linear(predictor_hidden, out_features)
+            torch.nn.Linear(in_features, out_features),
+            # torch.nn.ReLU(),
+            # torch.nn.Linear(predictor_hidden, out_features)
         ).to(device=self.device)
         self.predictor_opt = torch.optim.SGD(self.predictor.parameters(), lr=predictor_lr)
 
